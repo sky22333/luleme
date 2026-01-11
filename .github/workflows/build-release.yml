@@ -1,0 +1,79 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'VERSION'
+      - 'app/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY_BASE64 != '' }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Decode Keystore
+        if: env.HAS_SIGNING_KEY == 'true'
+        id: decode_keystore
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: 'keystore.jks'
+          encodedString: ${{ secrets.SIGNING_KEY_BASE64 }}
+
+      - name: Build Release APK
+        run: gradle assembleRelease
+        env:
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY_STORE_PATH: ${{ steps.decode_keystore.outputs.filePath }}
+      
+      - name: Read Version
+        id: version
+        run: echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
+      
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Luleme-v${{ steps.version.outputs.VERSION }}
+          path: app/build/outputs/apk/release/*.apk
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: 撸了么 v${{ steps.version.outputs.VERSION }}
+          files: app/build/outputs/apk/release/*.apk
+          draft: false
+          prerelease: false
+          body: |
+            ## 📦 版本更新 v${{ steps.version.outputs.VERSION }}
+            
+            ### 安装说明
+            1. 下载下方的 APK 文件
+            2. 在 Android 设备上安装
+            
+            > **注意**: 请在卸载前导出重要数据以免丢失。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

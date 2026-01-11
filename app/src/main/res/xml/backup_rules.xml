@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="root" />
+    <include domain="file" />
+    <include domain="database" />
+    <include domain="sharedpref" />
+    <include domain="external" />
+</full-backup-content>

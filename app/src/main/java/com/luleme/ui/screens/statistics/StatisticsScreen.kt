@@ -227,6 +227,8 @@ fun MonthView(monthData: Map<LocalDate, Int>) {
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
+                val dates = monthData.keys.sorted()
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(7),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -234,8 +236,7 @@ fun MonthView(monthData: Map<LocalDate, Int>) {
                     userScrollEnabled = false,
                     modifier = Modifier.height(300.dp) // Approximate height for calendar
                 ) {
-                    // Padding for first day of month
-                    val firstDay = monthData.keys.firstOrNull()
+                    val firstDay = dates.firstOrNull()
                     if (firstDay != null) {
                         val paddingDays = firstDay.dayOfWeek.value - 1
                         items(paddingDays) {
@@ -243,8 +244,15 @@ fun MonthView(monthData: Map<LocalDate, Int>) {
                         }
                     }
 
-                    items(monthData.entries.toList()) { (date, count) ->
+                    items(dates) { date ->
+                        val count = monthData[date] ?: 0
                         val isToday = date == LocalDate.now()
+                        val textColor = when {
+                            count >= 3 -> Color.White
+                            count == 2 -> MaterialTheme.colorScheme.onTertiary
+                            count == 1 -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                         
                         Box(
                             modifier = Modifier
@@ -270,12 +278,20 @@ fun MonthView(monthData: Map<LocalDate, Int>) {
                             } else if (count > 0) {
                                 // Empty for 1-2, just color
                             }
+
+                            Text(
+                                text = date.dayOfMonth.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = textColor,
+                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
+                            )
                             
                             if (isToday && count == 0) {
                                 Box(
                                     modifier = Modifier
                                         .size(4.dp)
                                         .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                        .align(Alignment.BottomCenter)
                                 )
                             }
                         }

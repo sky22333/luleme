@@ -3,6 +3,8 @@ package com.luleme.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
 import com.luleme.domain.model.Record
 import com.luleme.domain.model.UserSettings
 import com.luleme.domain.repository.RecordRepository
@@ -118,13 +120,17 @@ class SettingsViewModel @Inject constructor(
     
     suspend fun getAllRecordsJson(): String {
         val records = recordRepository.getAllRecords()
-        return gson.toJson(records)
+        val payload = BackupPayload(
+            version = 1,
+            exportedAt = System.currentTimeMillis(),
+            records = records
+        )
+        return gson.toJson(payload)
     }
 
     suspend fun restoreData(json: String): Boolean {
         return try {
-            val type = object : com.google.gson.reflect.TypeToken<List<Record>>() {}.type
-            val records: List<Record> = gson.fromJson(json, type)
+            val records = parseRecordsFromJson(json) ?: return false
             if (records.isNotEmpty()) {
                 recordRepository.importRecords(records)
             }
@@ -133,5 +139,73 @@ class SettingsViewModel @Inject constructor(
             e.printStackTrace()
             false
         }
+    }
+
+    private data class BackupPayload(
+        val version: Int,
+        val exportedAt: Long,
+        val records: List<Record>
+    )
+
+    private fun parseRecordsFromJson(json: String): List<Record>? {
+        val element = JsonParser.parseString(json)
+        return when {
+            element.isJsonArray -> parseRecordsArray(element)
+            element.isJsonObject -> {
+                val obj = element.asJsonObject
+                val recordsElement = if (obj.has("records")) obj.get("records") else null
+                if (recordsElement != null && recordsElement.isJsonArray) {
+                    parseRecordsArray(recordsElement)
+                } else {
+                    null
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun parseRecordsArray(element: JsonElement): List<Record> {
+        if (!element.isJsonArray) return emptyList()
+        val array = element.asJsonArray
+        val records = mutableListOf<Record>()
+        array.forEach { item ->
+            if (!item.isJsonObject) return@forEach
+            val obj = item.asJsonObject
+            val timestamp = parseLong(obj.get("timestamp")) ?: return@forEach
+            val date = parseString(obj.get("date")) ?: return@forEach
+            val id = parseLong(obj.get("id")) ?: 0L
+            val note = parseString(obj.get("note"))
+            records.add(
+                Record(
+                    id = id,
+                    timestamp = timestamp,
+                    date = date,
+                    note = note
+                )
+            )
+        }
+        return records
+    }
+
+    private fun parseLong(element: JsonElement?): Long? {
+        if (element == null || element.isJsonNull) return null
+        if (element.isJsonPrimitive) {
+            val prim = element.asJsonPrimitive
+            return when {
+                prim.isNumber -> prim.asLong
+                prim.isString -> prim.asString.toLongOrNull()
+                else -> null
+            }
+        }
+        return null
+    }
+
+    private fun parseString(element: JsonElement?): String? {
+        if (element == null || element.isJsonNull) return null
+        if (element.isJsonPrimitive) {
+            val prim = element.asJsonPrimitive
+            return if (prim.isString) prim.asString else prim.toString()
+        }
+        return null
     }
 }

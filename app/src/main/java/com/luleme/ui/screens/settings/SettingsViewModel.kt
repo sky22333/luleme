@@ -8,15 +8,20 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.google.gson.stream.JsonReader
+import com.luleme.data.encryption.EncryptionManager
+import com.luleme.data.webdav.WebDavClient
+import com.luleme.data.webdav.WebDavConfig
 import com.luleme.domain.model.Record
 import com.luleme.domain.model.UserSettings
 import com.luleme.domain.repository.RecordRepository
 import com.luleme.domain.repository.UserSettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.StringReader
 import java.time.Instant
 import java.time.ZoneId
@@ -25,14 +30,20 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val age: Int = 25,
-    val lockEnabled: Boolean = false
+    val lockEnabled: Boolean = false,
+    val webDavUrl: String = "",
+    val webDavUsername: String = "",
+    val webDavDirectory: String = "",
+    val webDavPasswordSaved: Boolean = false
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userSettingsRepository: UserSettingsRepository,
     private val recordRepository: RecordRepository,
-    private val gson: Gson
+    private val gson: Gson,
+    private val encryptionManager: EncryptionManager,
+    private val webDavClient: WebDavClient
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -48,7 +59,11 @@ class SettingsViewModel @Inject constructor(
             if (settings != null) {
                 _uiState.value = SettingsUiState(
                     age = settings.age,
-                    lockEnabled = settings.lockEnabled
+                    lockEnabled = settings.lockEnabled,
+                    webDavUrl = settings.webDavUrl,
+                    webDavUsername = settings.webDavUsername,
+                    webDavDirectory = settings.webDavDirectory,
+                    webDavPasswordSaved = settings.webDavPassword.isNotBlank()
                 )
             } else {
                 // Initialize default settings
@@ -77,7 +92,11 @@ class SettingsViewModel @Inject constructor(
         userSettingsRepository.saveSettings(
             UserSettings(
                 age = state.age,
-                lockEnabled = state.lockEnabled
+                lockEnabled = state.lockEnabled,
+                webDavUrl = state.webDavUrl,
+                webDavUsername = state.webDavUsername,
+                webDavPassword = currentEncryptedWebDavPassword(),
+                webDavDirectory = state.webDavDirectory
             )
         )
         _uiState.value = state
@@ -89,24 +108,72 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    suspend fun getAllRecordsJson(): String {
-        val records = recordRepository.getAllRecords().map { it.toBackupRecord() }
-        val payload = BackupPayload(
-            version = 1,
-            exportedAt = System.currentTimeMillis(),
-            records = records
-        )
-        return gson.toJson(payload)
+    suspend fun getAllRecordsJson(): String = withContext(Dispatchers.IO) {
+        createBackupJson()
     }
 
-    suspend fun restoreData(json: String): Boolean {
-        return try {
-            val records = parseRecordsFromJson(json) ?: return false
+    suspend fun restoreData(json: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val records = parseRecordsFromJson(json) ?: return@withContext false
             recordRepository.replaceAllRecords(records)
             true
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    suspend fun saveWebDavConfig(
+        url: String,
+        username: String,
+        password: String,
+        directory: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val encryptedPassword = when {
+                password.isNotBlank() -> encryptionManager.encryptData(password)
+                _uiState.value.webDavPasswordSaved -> currentEncryptedWebDavPassword()
+                else -> ""
+            }
+            val state = _uiState.value.copy(
+                webDavUrl = url.trim(),
+                webDavUsername = username.trim(),
+                webDavDirectory = directory.trim().trim('/'),
+                webDavPasswordSaved = encryptedPassword.isNotBlank()
+            )
+            userSettingsRepository.saveSettings(
+                UserSettings(
+                    age = state.age,
+                    lockEnabled = state.lockEnabled,
+                    webDavUrl = state.webDavUrl,
+                    webDavUsername = state.webDavUsername,
+                    webDavPassword = encryptedPassword,
+                    webDavDirectory = state.webDavDirectory
+                )
+            )
+            _uiState.value = state
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun testWebDavConnection(): Boolean = withContext(Dispatchers.IO) {
+        return@withContext runWebDavAction { webDavClient.testConnection(it) }
+    }
+
+    suspend fun backupToWebDav(): Boolean = withContext(Dispatchers.IO) {
+        return@withContext runWebDavAction { config ->
+            webDavClient.uploadLatest(config, createBackupJson())
+        }
+    }
+
+    suspend fun restoreFromWebDav(): Boolean = withContext(Dispatchers.IO) {
+        return@withContext runWebDavAction { config ->
+            val json = webDavClient.downloadLatest(config)
+            val records = parseRecordsFromJson(json) ?: throw BackupFormatException()
+            recordRepository.replaceAllRecords(records)
         }
     }
 
@@ -221,6 +288,41 @@ class SettingsViewModel @Inject constructor(
             .atZone(ZoneId.systemDefault())
             .toLocalDate()
             .format(DateTimeFormatter.ISO_DATE)
+    }
+
+    private suspend fun createBackupJson(): String {
+        val records = recordRepository.getAllRecords().map { it.toBackupRecord() }
+        val payload = BackupPayload(
+            version = 1,
+            exportedAt = System.currentTimeMillis(),
+            records = records
+        )
+        return gson.toJson(payload)
+    }
+
+    private suspend fun runWebDavAction(action: suspend (WebDavConfig) -> Unit): Boolean {
+        return try {
+            action(requireWebDavConfig())
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private suspend fun requireWebDavConfig(): WebDavConfig {
+        val settings = userSettingsRepository.getSettings() ?: throw IllegalStateException("Missing settings")
+        if (settings.webDavUrl.isBlank()) throw IllegalStateException("Missing WebDAV URL")
+        return WebDavConfig(
+            url = settings.webDavUrl,
+            username = settings.webDavUsername,
+            password = settings.webDavPassword.takeIf { it.isNotBlank() }?.let { encryptionManager.decryptData(it) }.orEmpty(),
+            directory = settings.webDavDirectory
+        )
+    }
+
+    private suspend fun currentEncryptedWebDavPassword(): String {
+        return userSettingsRepository.getSettings()?.webDavPassword.orEmpty()
     }
 
     private class BackupFormatException : IllegalArgumentException()

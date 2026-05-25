@@ -21,14 +21,22 @@ class UserSettingsRepositoryImpl @Inject constructor(
     private fun UserSettingsEntity.toDomain(): UserSettings {
         return UserSettings(
             age = this.age,
-            lockEnabled = this.lockEnabled
+            lockEnabled = this.lockEnabled,
+            webDavUrl = this.webDavUrl,
+            webDavUsername = this.webDavUsername,
+            webDavPassword = this.webDavPassword,
+            webDavDirectory = this.webDavDirectory
         )
     }
 
     private fun UserSettings.toEntity(): UserSettingsEntity {
         return UserSettingsEntity(
             age = this.age,
-            lockEnabled = this.lockEnabled
+            lockEnabled = this.lockEnabled,
+            webDavUrl = this.webDavUrl,
+            webDavUsername = this.webDavUsername,
+            webDavPassword = this.webDavPassword,
+            webDavDirectory = this.webDavDirectory
         )
     }
 }

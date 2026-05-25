@@ -34,7 +34,6 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -60,15 +59,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.luleme.domain.model.Record
 import com.luleme.ui.components.CuteCard
-import com.luleme.ui.theme.CutePink
-import com.luleme.ui.theme.CuteYellow
-import com.luleme.ui.theme.PrimaryLight
 import java.time.Instant
 import java.time.DayOfWeek
 import java.time.LocalDate

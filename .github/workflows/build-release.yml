@@ -7,6 +7,12 @@ on:
       - 'VERSION'
       - 'app/**'
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: '是否标记为预发布版本'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -66,7 +72,7 @@ jobs:
           name: 撸了么 v${{ steps.version.outputs.VERSION }}
           files: app/build/outputs/apk/release/*.apk
           draft: false
-          prerelease: false
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease == true }}
           body: |
             ## 📦 版本更新 v${{ steps.version.outputs.VERSION }}
             

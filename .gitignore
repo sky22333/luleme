@@ -1,0 +1,22 @@
+REQUIREMENTS_PLAN.md
+
+# Gradle
+.gradle/
+build/
+
+# Android build outputs
+captures/
+*.apk
+*.aab
+*.ap_
+
+# Local environment
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# System files
+.DS_Store
+Thumbs.db

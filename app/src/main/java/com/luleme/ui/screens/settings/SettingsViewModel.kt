@@ -18,6 +18,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.StringReader
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -49,7 +52,7 @@ class SettingsViewModel @Inject constructor(
                 )
             } else {
                 // Initialize default settings
-                val default = UserSettings(25, false, null)
+                val default = UserSettings(25, false)
                 userSettingsRepository.saveSettings(default)
                 _uiState.value = SettingsUiState(25, false)
             }
@@ -74,8 +77,7 @@ class SettingsViewModel @Inject constructor(
         userSettingsRepository.saveSettings(
             UserSettings(
                 age = state.age,
-                lockEnabled = state.lockEnabled,
-                pinHash = null
+                lockEnabled = state.lockEnabled
             )
         )
         _uiState.value = state
@@ -88,7 +90,7 @@ class SettingsViewModel @Inject constructor(
     }
     
     suspend fun getAllRecordsJson(): String {
-        val records = recordRepository.getAllRecords()
+        val records = recordRepository.getAllRecords().map { it.toBackupRecord() }
         val payload = BackupPayload(
             version = 1,
             exportedAt = System.currentTimeMillis(),
@@ -100,9 +102,7 @@ class SettingsViewModel @Inject constructor(
     suspend fun restoreData(json: String): Boolean {
         return try {
             val records = parseRecordsFromJson(json) ?: return false
-            if (records.isNotEmpty()) {
-                recordRepository.importRecords(records)
-            }
+            recordRepository.replaceAllRecords(records)
             true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -117,17 +117,33 @@ class SettingsViewModel @Inject constructor(
         @SerializedName("exportedAt")
         val exportedAt: Long,
         @SerializedName("records")
-        val records: List<Record>
+        val records: List<BackupRecord>
+    )
+
+    @Keep
+    private data class BackupRecord(
+        @SerializedName("uuid")
+        val uuid: String,
+        @SerializedName("timestamp")
+        val timestamp: Long,
+        @SerializedName("note")
+        val note: String?,
+        @SerializedName("createdAt")
+        val createdAt: Long,
+        @SerializedName("updatedAt")
+        val updatedAt: Long
     )
 
     private fun parseRecordsFromJson(json: String): List<Record>? {
         val sanitized = json.trim().trimStart('\uFEFF')
         if (sanitized.isEmpty()) return null
         val reader = JsonReader(StringReader(sanitized))
-        reader.isLenient = true
+        reader.isLenient = false
         val element = JsonParser.parseReader(reader)
         if (!element.isJsonObject) return null
         val obj = element.asJsonObject
+        val version = parseInt(obj.get("version")) ?: return null
+        if (version != 1) return null
         val recordsElement = if (obj.has("records")) obj.get("records") else null
         return if (recordsElement != null && recordsElement.isJsonArray) {
             parseRecordsArray(recordsElement)
@@ -140,23 +156,32 @@ class SettingsViewModel @Inject constructor(
         if (!element.isJsonArray) return emptyList()
         val array = element.asJsonArray
         val records = mutableListOf<Record>()
+        val uuids = mutableSetOf<String>()
         array.forEach { item ->
-            if (!item.isJsonObject) return@forEach
+            if (!item.isJsonObject) throw BackupFormatException()
             val obj = item.asJsonObject
-            val timestamp = parseLong(obj.get("timestamp")) ?: return@forEach
-            val date = parseString(obj.get("date")) ?: return@forEach
-            val id = parseLong(obj.get("id")) ?: 0L
+            val uuid = parseString(obj.get("uuid"))?.takeIf { it.isNotBlank() } ?: throw BackupFormatException()
+            if (!uuids.add(uuid)) throw BackupFormatException()
+            val timestamp = parseLong(obj.get("timestamp"))?.takeIf { it > 0 } ?: throw BackupFormatException()
+            val createdAt = parseLong(obj.get("createdAt"))?.takeIf { it > 0 } ?: throw BackupFormatException()
+            val updatedAt = parseLong(obj.get("updatedAt"))?.takeIf { it >= createdAt } ?: throw BackupFormatException()
             val note = parseString(obj.get("note"))
             records.add(
                 Record(
-                    id = id,
+                    uuid = uuid,
                     timestamp = timestamp,
-                    date = date,
-                    note = note
+                    date = timestamp.toDateString(),
+                    note = note,
+                    createdAt = createdAt,
+                    updatedAt = updatedAt
                 )
             )
         }
         return records
+    }
+
+    private fun parseInt(element: JsonElement?): Int? {
+        return parseLong(element)?.takeIf { it in 1L..Int.MAX_VALUE.toLong() }?.toInt()
     }
 
     private fun parseLong(element: JsonElement?): Long? {
@@ -176,8 +201,27 @@ class SettingsViewModel @Inject constructor(
         if (element == null || element.isJsonNull) return null
         if (element.isJsonPrimitive) {
             val prim = element.asJsonPrimitive
-            return if (prim.isString) prim.asString else prim.toString()
+            return if (prim.isString) prim.asString else null
         }
         return null
     }
+
+    private fun Record.toBackupRecord(): BackupRecord {
+        return BackupRecord(
+            uuid = uuid,
+            timestamp = timestamp,
+            note = note,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
+    }
+
+    private fun Long.toDateString(): String {
+        return Instant.ofEpochMilli(this)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+            .format(DateTimeFormatter.ISO_DATE)
+    }
+
+    private class BackupFormatException : IllegalArgumentException()
 }

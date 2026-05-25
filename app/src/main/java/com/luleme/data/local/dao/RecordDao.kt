@@ -3,6 +3,7 @@ package com.luleme.data.local.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import com.luleme.data.local.entity.RecordEntity
 
 data class DailyCount(
@@ -11,32 +12,33 @@ data class DailyCount(
 )
 
 @Dao
-interface RecordDao {
+abstract class RecordDao {
     @Query("SELECT * FROM records WHERE date >= :startDate AND date <= :endDate ORDER BY timestamp DESC")
-    suspend fun getRecordsBetween(startDate: String, endDate: String): List<RecordEntity>
+    abstract suspend fun getRecordsBetween(startDate: String, endDate: String): List<RecordEntity>
     
     @Insert
-    suspend fun insertRecord(record: RecordEntity): Long
+    abstract suspend fun insertRecord(record: RecordEntity): Long
 
     @Insert
-    suspend fun insertRecords(records: List<RecordEntity>)
+    abstract suspend fun insertRecords(records: List<RecordEntity>)
 
     @Query(
         """
         UPDATE records
         SET timestamp = :timestamp,
             date = :date,
-            note = :note
+            note = :note,
+            updated_at = :updatedAt
         WHERE id = :id
         """
     )
-    suspend fun updateRecord(id: Long, timestamp: Long, date: String, note: String?)
+    abstract suspend fun updateRecord(id: Long, timestamp: Long, date: String, note: String?, updatedAt: Long)
 
     @Query("DELETE FROM records WHERE id = :id")
-    suspend fun deleteRecord(id: Long)
+    abstract suspend fun deleteRecord(id: Long)
 
     @Query("SELECT * FROM records WHERE date = :date ORDER BY timestamp ASC")
-    suspend fun getRecordsByDate(date: String): List<RecordEntity>
+    abstract suspend fun getRecordsByDate(date: String): List<RecordEntity>
 
     @Query(
         """
@@ -46,11 +48,19 @@ interface RecordDao {
         GROUP BY date
         """
     )
-    suspend fun getDailyCountsBetween(startDate: String, endDate: String): List<DailyCount>
+    abstract suspend fun getDailyCountsBetween(startDate: String, endDate: String): List<DailyCount>
     
     @Query("DELETE FROM records")
-    suspend fun clearAll()
+    abstract suspend fun clearAll()
 
     @Query("SELECT * FROM records ORDER BY timestamp DESC")
-    suspend fun getAllRecords(): List<RecordEntity>
+    abstract suspend fun getAllRecords(): List<RecordEntity>
+
+    @Transaction
+    suspend fun replaceAll(records: List<RecordEntity>) {
+        clearAll()
+        if (records.isNotEmpty()) {
+            insertRecords(records)
+        }
+    }
 }

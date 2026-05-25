@@ -13,8 +13,5 @@ data class UserSettingsEntity(
     val age: Int,
     
     @ColumnInfo(name = "lock_enabled")
-    val lockEnabled: Boolean = false, // Default false as per request (optional)
-    
-    @ColumnInfo(name = "pin_hash")
-    val pinHash: String? = null
+    val lockEnabled: Boolean = false // Default false as per request (optional)
 )

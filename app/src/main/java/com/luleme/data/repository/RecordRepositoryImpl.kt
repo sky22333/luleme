@@ -9,6 +9,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import javax.inject.Inject
 
 class RecordRepositoryImpl @Inject constructor(
@@ -40,11 +41,15 @@ class RecordRepositoryImpl @Inject constructor(
     override suspend fun addRecord(timestamp: Long, note: String?): Long {
         val dateString = timestamp.toDateString()
         val encryptedNote = note?.let { encryptionManager.encryptData(it) }
+        val now = System.currentTimeMillis()
 
         val entity = RecordEntity(
+            uuid = UUID.randomUUID().toString(),
             timestamp = timestamp,
             date = dateString,
-            note = encryptedNote
+            note = encryptedNote,
+            createdAt = now,
+            updatedAt = now
         )
         return dao.insertRecord(entity)
     }
@@ -55,7 +60,8 @@ class RecordRepositoryImpl @Inject constructor(
             id = record.id,
             timestamp = record.timestamp,
             date = record.timestamp.toDateString(),
-            note = encryptedNote
+            note = encryptedNote,
+            updatedAt = System.currentTimeMillis()
         )
     }
 
@@ -71,26 +77,32 @@ class RecordRepositoryImpl @Inject constructor(
         return dao.getAllRecords().map { it.toDomain() }
     }
 
-    override suspend fun importRecords(records: List<Record>) {
+    override suspend fun replaceAllRecords(records: List<Record>) {
         val entities = records.map { record ->
             val encryptedNote = record.note?.let { encryptionManager.encryptData(it) }
             RecordEntity(
                 id = 0, // Reset ID to avoid conflicts and auto-generate
+                uuid = record.uuid.ifBlank { UUID.randomUUID().toString() },
                 timestamp = record.timestamp,
-                date = record.date,
-                note = encryptedNote
+                date = record.timestamp.toDateString(),
+                note = encryptedNote,
+                createdAt = record.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
+                updatedAt = record.updatedAt.takeIf { it > 0 } ?: System.currentTimeMillis()
             )
         }
-        dao.insertRecords(entities)
+        dao.replaceAll(entities)
     }
 
     private fun RecordEntity.toDomain(): Record {
         val decryptedNote = this.note?.let { encryptionManager.decryptData(it) }
         return Record(
             id = this.id,
+            uuid = this.uuid,
             timestamp = this.timestamp,
             date = this.date,
-            note = decryptedNote
+            note = decryptedNote,
+            createdAt = this.createdAt,
+            updatedAt = this.updatedAt
         )
     }
 

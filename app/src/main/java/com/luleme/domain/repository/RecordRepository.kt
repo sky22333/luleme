@@ -13,5 +13,5 @@ interface RecordRepository {
     suspend fun deleteRecord(id: Long)
     suspend fun clearAll()
     suspend fun getAllRecords(): List<Record>
-    suspend fun importRecords(records: List<Record>)
+    suspend fun replaceAllRecords(records: List<Record>)
 }

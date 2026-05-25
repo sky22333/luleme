@@ -21,16 +21,14 @@ class UserSettingsRepositoryImpl @Inject constructor(
     private fun UserSettingsEntity.toDomain(): UserSettings {
         return UserSettings(
             age = this.age,
-            lockEnabled = this.lockEnabled,
-            pinHash = this.pinHash
+            lockEnabled = this.lockEnabled
         )
     }
 
     private fun UserSettings.toEntity(): UserSettingsEntity {
         return UserSettingsEntity(
             age = this.age,
-            lockEnabled = this.lockEnabled,
-            pinHash = this.pinHash
+            lockEnabled = this.lockEnabled
         )
     }
 }

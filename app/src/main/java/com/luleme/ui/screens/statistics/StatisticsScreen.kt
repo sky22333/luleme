@@ -1,6 +1,7 @@
 package com.luleme.ui.screens.statistics
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
@@ -295,6 +297,7 @@ fun MonthView(
 ) {
     val monthData = state.monthData
     val visibleMonth = state.visibleMonth
+    val selectedDate = state.selectedDate
     Column(modifier = Modifier.padding(16.dp)) {
         CuteCard {
             Column {
@@ -366,26 +369,37 @@ fun MonthView(
                     items(dates) { date ->
                         val count = monthData[date] ?: 0
                         val isToday = date == LocalDate.now()
+                        val isSelected = date == selectedDate
                         val textColor = when {
                             count >= 3 -> Color.White
                             count == 2 -> MaterialTheme.colorScheme.onTertiary
                             count == 1 -> MaterialTheme.colorScheme.onPrimaryContainer
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
+                        val targetColor = when {
+                            count >= 3 -> MaterialTheme.colorScheme.error
+                            count == 2 -> MaterialTheme.colorScheme.tertiary
+                            count == 1 -> MaterialTheme.colorScheme.primaryContainer
+                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        }
+                        val cellColor by animateColorAsState(
+                            targetValue = targetColor,
+                            animationSpec = tween(durationMillis = 180),
+                            label = "heatmap_cell_color"
+                        )
+                        val cellScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.08f else 1f,
+                            animationSpec = tween(durationMillis = 120),
+                            label = "heatmap_cell_scale"
+                        )
                         
                         Box(
                             modifier = Modifier
                                 .aspectRatio(1f)
+                                .scale(cellScale)
                                 .clip(CircleShape)
                                 .clickable { onDateClick(date) }
-                                .background(
-                                    color = when {
-                                        count >= 3 -> MaterialTheme.colorScheme.error
-                                        count == 2 -> MaterialTheme.colorScheme.tertiary
-                                        count == 1 -> MaterialTheme.colorScheme.primaryContainer
-                                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                    }
-                                ),
+                                .background(color = cellColor),
                             contentAlignment = Alignment.Center
                         ) {
                             if (count >= 3) {

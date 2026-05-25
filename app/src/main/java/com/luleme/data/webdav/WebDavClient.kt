@@ -51,7 +51,7 @@ class WebDavClient @Inject constructor() {
 
     fun downloadLatest(config: WebDavConfig): String {
         val connection = request(config, method = "GET", fileName = LATEST_FILE_NAME)
-        try {
+        return try {
             val code = connection.responseCode
             if (code == HttpURLConnection.HTTP_NOT_FOUND) {
                 throw IOException("未找到云端备份")

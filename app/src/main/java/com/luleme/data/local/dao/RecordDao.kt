@@ -57,7 +57,7 @@ abstract class RecordDao {
     abstract suspend fun getAllRecords(): List<RecordEntity>
 
     @Transaction
-    suspend fun replaceAll(records: List<RecordEntity>) {
+    open suspend fun replaceAll(records: List<RecordEntity>) {
         clearAll()
         if (records.isNotEmpty()) {
             insertRecords(records)

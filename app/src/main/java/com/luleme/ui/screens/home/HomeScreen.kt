@@ -25,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FlightTakeoff
-import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Button
@@ -326,19 +325,7 @@ private fun TakeoffIcon(
                 }
         )
         Icon(
-            imageVector = Icons.Rounded.FlightTakeoff,
-            contentDescription = null,
-            modifier = modifier
-                .alpha(if (progress == 0f) 1f else (1f - doneProgress) * progress.coerceIn(0f, 1f))
-                .graphicsLayer {
-                    translationX = -12f * (1f - progress)
-                    translationY = 10f * (1f - progress)
-                    scaleX = 0.82f + progress * 0.18f
-                    scaleY = 0.82f + progress * 0.18f
-                }
-        )
-        Icon(
-            imageVector = Icons.Rounded.Done,
+            imageVector = Icons.Rounded.Check,
             contentDescription = null,
             modifier = modifier
                 .alpha(doneProgress)

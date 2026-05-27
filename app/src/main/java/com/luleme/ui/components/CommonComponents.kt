@@ -51,24 +51,41 @@ fun CuteCard(
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(targetValue = if (isPressed) 0.96f else 1f, label = "cardScale")
+    val cardModifier = modifier.fillMaxWidth()
+    val shape = RoundedCornerShape(24.dp)
+    val colors = CardDefaults.cardColors(
+        containerColor = backgroundColor,
+        contentColor = contentColor
+    )
+    val elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .scale(scale),
-        shape = RoundedCornerShape(24.dp), // Extra rounded for cute look
-        colors = CardDefaults.cardColors(
-            containerColor = backgroundColor,
-            contentColor = contentColor
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        onClick = onClick ?: {}
-    ) {
-        Box(modifier = Modifier.padding(20.dp)) {
-            content()
+    if (onClick == null) {
+        Card(
+            modifier = cardModifier,
+            shape = shape,
+            colors = colors,
+            elevation = elevation
+        ) {
+            Box(modifier = Modifier.padding(20.dp)) {
+                content()
+            }
+        }
+    } else {
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val scale by animateFloatAsState(targetValue = if (isPressed) 0.96f else 1f, label = "cardScale")
+
+        Card(
+            modifier = cardModifier.scale(scale),
+            shape = shape,
+            colors = colors,
+            elevation = elevation,
+            onClick = onClick,
+            interactionSource = interactionSource
+        ) {
+            Box(modifier = Modifier.padding(20.dp)) {
+                content()
+            }
         }
     }
 }
